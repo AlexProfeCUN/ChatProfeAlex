@@ -33,6 +33,17 @@ export default function App() {
     scrollToBottom();
   }, [messages, isLoading]);
 
+  useEffect(() => {
+    const savedKey = localStorage.getItem('profealex-gemini-key');
+    if (savedKey) {
+      setApiKey(savedKey);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('profealex-gemini-key', apiKey);
+  }, [apiKey]);
+
   const modes = [
     {
       id: 'explicativo',
@@ -93,6 +104,19 @@ export default function App() {
   const handleSendMessage = async (customQuery: string | null = null) => {
     const textToSend = customQuery ?? inputQuery;
     if (!textToSend.trim() || isLoading) return;
+
+    if (!apiKey.trim()) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          sender: 'tutor',
+          text: '⚠️ **Falta la clave de Gemini**: Ingresa tu API key en el panel lateral para poder consultar al tutor IA.',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+      ]);
+      return;
+    }
 
     const userMsgId = Date.now().toString();
     const newUserMessage = {
@@ -161,6 +185,11 @@ Siempre responde en idioma español.`;
         body: JSON.stringify(payload)
       });
 
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`Gemini API ${response.status}: ${errorBody.slice(0, 200)}`);
+      }
+
       const data = await response.json();
       const botResponseText = data?.candidates?.[0]?.content?.parts?.[0]?.text ||
         'Disculpa estimado estudiante, tuve un pequeño problema de conexión con el servidor. ¿Podrías reformular tu pregunta?';
@@ -175,12 +204,18 @@ Siempre responde en idioma español.`;
       setMessages((prev) => [...prev, newBotMessage]);
     } catch (error) {
       console.error('Error fetching Gemini response:', error);
+      const errorMessage = error instanceof Error && error.message.includes('401')
+        ? '⚠️ **Clave de Gemini inválida o vencida**: Revisa tu API key y vuelve a intentarlo.'
+        : error instanceof Error && error.message.includes('429')
+          ? '⚠️ **Límite de uso alcanzado**: Espera un momento y vuelve a preguntar.'
+          : '⚠️ **Error de conexión académica**: No fue posible comunicarme con el motor de IA. Verifica tu conexión a internet o la clave de la API.';
+
       setMessages((prev) => [
         ...prev,
         {
           id: (Date.now() + 1).toString(),
           sender: 'tutor',
-          text: '⚠️ **Error de conexión académica**: No fue posible comunicarme con el motor de IA. Por favor verifica tu conexión a internet o intenta de nuevo.',
+          text: errorMessage,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]);
@@ -398,6 +433,22 @@ Siempre responde en idioma español.`;
               </div>
               <p className="text-slate-400 text-[11px] leading-relaxed">
                 Asistencia en Estructuras de Datos, POO, SQL Avanzado, Patrones de Diseño, Redes y Arquitectura de Software.
+              </p>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-xs space-y-2">
+              <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider block">
+                Gemini API Key
+              </label>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Pega tu clave de Gemini"
+                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-slate-100 placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+              />
+              <p className="text-[10px] text-slate-400 leading-relaxed">
+                Se guarda localmente en tu navegador para usarla en esta sesión.
               </p>
             </div>
           </div>
